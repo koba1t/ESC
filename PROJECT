@@ -1,3 +1,7 @@
 domain: k06.in
 repo: github.com/koba1t/ESC
+resources:
+- group: esc
+  kind: Template
+  version: v1alpha1
 version: "2"
