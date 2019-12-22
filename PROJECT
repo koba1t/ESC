@@ -4,4 +4,7 @@ resources:
 - group: esc
   kind: Template
   version: v1alpha1
+- group: esc
+  kind: Userland
+  version: v1alpha1
 version: "2"

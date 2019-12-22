@@ -1,0 +1,26 @@
+# permissions to do edit userlands.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: userland-editor-role
+rules:
+- apiGroups:
+  - esc.k06.in
+  resources:
+  - userlands
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - esc.k06.in
+  resources:
+  - userlands/status
+  verbs:
+  - get
+  - patch
+  - update
