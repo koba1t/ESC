@@ -18,6 +18,7 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	escv1alpha1 "github.com/koba1t/ESC/api/v1alpha1"
 	"github.com/koba1t/ESC/controllers"
@@ -53,7 +54,10 @@ func main() {
 		o.Development = true
 	}))
 
+	var resyncPeriod = time.Second * 30
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		SyncPeriod:         &resyncPeriod,
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
@@ -73,9 +77,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.UserlandReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Userland"),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("Userland"),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("userland-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Userland")
 		os.Exit(1)

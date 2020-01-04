@@ -27,8 +27,7 @@ type UserlandSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Userland. Edit Userland_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	TemplateName string `json:"templateName,omitempty"`
 }
 
 // UserlandStatus defines the observed state of Userland

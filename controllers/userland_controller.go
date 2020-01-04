@@ -18,6 +18,12 @@ package controllers
 import (
 	"context"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"k8s.io/client-go/tools/record"
+
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,24 +35,174 @@ import (
 // UserlandReconciler reconciles a Userland object
 type UserlandReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log      logr.Logger
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=esc.k06.in,resources=userlands,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=esc.k06.in,resources=userlands/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=esc.k06.in,resources=templates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("userland", req.NamespacedName)
+	ctx := context.Background()
+	log := r.Log.WithValues("userland", req.NamespacedName)
 
-	// your logic here
+	//Load the Userland by name
+	var userland escv1alpha1.Userland
+	if err := r.Get(ctx, req.NamespacedName, &userland); err != nil {
+		log.Error(err, "unable to fetch Userland")
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// 2: Clean Up old Deployment which had been owned by Userland Resource.
+	if err := r.cleanupOwnedResources(ctx, log, &userland); err != nil {
+		log.Error(err, "failed to clean up old Deployment resources for this userland")
+		return ctrl.Result{}, err
+	}
+
+	// 3: Create or Update deployment object
+	templateName := userland.Spec.TemplateName
+	// List all deployment resources owned by this Userland resource
+	//var templates escv1alpha1.TemplateList
+	//if err := r.List(ctx, &templates, client.InNamespace(userland.Namespace), client.MatchingFields{"Name": templateName}); err != nil {
+	var template escv1alpha1.Template
+	namespacedTemplateName := req.NamespacedName
+	namespacedTemplateName.Name = templateName
+	if err := r.Get(ctx, namespacedTemplateName, &template); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// define deploymentName join to templateName and metadata.Name
+	deploymentName := userland.Spec.TemplateName + "-" + userland.Name
+
+	// define deployment template using deploymentName
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentName,
+			Namespace: req.Namespace,
+		},
+	}
+
+	// Create or Update deployment object
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+
+		// set the replicas from 1
+		replicas := int32(1)
+		deploy.Spec.Replicas = &replicas
+
+		//get template.Spec from template resource
+		//templateSpec := templates.Items[0].Spec.Template.Spec
+		templateSpec := template.Spec.Template.Spec
+
+		// set a label for our deployment
+		labels := map[string]string{
+			"app":        deploymentName,
+			"controller": req.Name,
+		}
+
+		// set labels to spec.selector for our deployment
+		if deploy.Spec.Selector == nil {
+			deploy.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
+		}
+
+		// set labels to template.objectMeta for our deployment
+		if deploy.Spec.Template.ObjectMeta.Labels == nil {
+			deploy.Spec.Template.ObjectMeta.Labels = labels
+		}
+
+		// set containers to template.spec.containers for our deployment
+		//if deploy.Spec.Template.Spec.Containers == nil {
+		//	deploy.Spec.Template.Spec = templateSpec
+		//}
+		deploy.Spec.Template.Spec = templateSpec
+
+		// set the owner so that garbage collection can kicks in
+		if err := ctrl.SetControllerReference(&userland, deploy, r.Scheme); err != nil {
+			log.Error(err, "unable to set ownerReference from Userland to Deployment")
+			return err
+		}
+
+		// end of ctrl.CreateOrUpdate
+		return nil
+
+	}); err != nil {
+		// error handling of ctrl.CreateOrUpdate
+		log.Error(err, "unable to ensure deployment is correct")
+		return ctrl.Result{}, err
+	}
+
+	// 4: Update userland Status
 
 	return ctrl.Result{}, nil
 }
 
+// cleanupOwnedResources will delete any existing Deployment resources
+func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr.Logger, userland *escv1alpha1.Userland) error {
+	log.Info("finding existing Deployments for userland resource")
+
+	// List all deployment resources owned by this Userland resource
+	var deployments appsv1.DeploymentList
+	if err := r.List(ctx, &deployments, client.InNamespace(userland.Namespace), client.MatchingFields(map[string]string{deploymentOwnerKey: userland.Name})); err != nil {
+		return err
+	}
+
+	// Delete deployment if the deployment name doesn't match userland.spec.TemplateName
+	for _, deployment := range deployments.Items {
+		if deployment.Name == userland.Spec.TemplateName+"-"+userland.Name {
+			// If this deployment's name matches the one on the Userland resource
+			// then do not delete it.
+			continue
+		}
+
+		// Delete old deployment object which doesn't match userland.spec.TemplateName
+		if err := r.Delete(ctx, &deployment); err != nil {
+			log.Error(err, "failed to delete Deployment resource")
+			return err
+		}
+
+		log.Info("delete deployment resource: " + deployment.Name)
+		r.Recorder.Eventf(userland, corev1.EventTypeNormal, "Deleted", "Deleted deployment %q", deployment.Name)
+	}
+
+	return nil
+}
+
+var (
+	deploymentOwnerKey = ".metadata.controller"
+	apiGVStr           = escv1alpha1.GroupVersion.String()
+)
+
+// SetupWithManager setup with controller manager
 func (r *UserlandReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	// add deploymentOwnerKey index to deployment object which Userland resource owns
+	if err := mgr.GetFieldIndexer().IndexField(&appsv1.Deployment{}, deploymentOwnerKey, func(rawObj runtime.Object) []string {
+		// grab the deployment object, extract the owner...
+		deployment := rawObj.(*appsv1.Deployment)
+		owner := metav1.GetControllerOf(deployment)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a Userland...
+		if owner.APIVersion != apiGVStr || owner.Kind != "Userland" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
+	// define to watch targets...Userland resource and owned Deployment
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&escv1alpha1.Userland{}).
+		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }
