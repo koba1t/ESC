@@ -36,6 +36,7 @@ type TemplateReconciler struct {
 // +kubebuilder:rbac:groups=esc.k06.in,resources=templates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=esc.k06.in,resources=templates/status,verbs=get;update;patch
 
+// Reconcile loop for Template resource
 func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("template", req.NamespacedName)
@@ -45,6 +46,7 @@ func (r *TemplateReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
+// SetupWithManager setup with controller manager
 func (r *TemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&escv1alpha1.Template{}).

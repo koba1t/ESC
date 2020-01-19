@@ -46,11 +46,12 @@ type UserlandReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
+// Reconcile loop for Userland resource
 func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("userland", req.NamespacedName)
 
-	//Load the Userland by name
+	// 1: Load the Userland resourcce by name
 	var userland escv1alpha1.Userland
 	if err := r.Get(ctx, req.NamespacedName, &userland); err != nil {
 		log.Error(err, "unable to fetch Userland")
