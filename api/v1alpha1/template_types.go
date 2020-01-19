@@ -29,6 +29,8 @@ type TemplateSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,3,opt,name=template"`
+
+	ServiceSpec v1.ServiceSpec `json:"service,omitempty" protobuf:"bytes,3,opt,name=service"`
 }
 
 // TemplateStatus defines the observed state of Template

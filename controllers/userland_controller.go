@@ -68,9 +68,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// 3: Create or Update deployment object
 	templateName := userland.Spec.TemplateName
-	// List all deployment resources owned by this Userland resource
-	//var templates escv1alpha1.TemplateList
-	//if err := r.List(ctx, &templates, client.InNamespace(userland.Namespace), client.MatchingFields{"Name": templateName}); err != nil {
+	// Get Template resource from templateName
 	var template escv1alpha1.Template
 	namespacedTemplateName := req.NamespacedName
 	namespacedTemplateName.Name = templateName
@@ -104,6 +102,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		labels := map[string]string{
 			"app":        deploymentName,
 			"controller": req.Name,
+			"template":   templateName,
 		}
 
 		// set labels to spec.selector for our deployment
@@ -137,18 +136,72 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
+	// define service using deploymentName
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentName + "-svc",
+			Namespace: req.Namespace,
+		},
+	}
+
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, service, func() error {
+
+		//get template.Spec from template resource
+		//templateSpec := templates.Items[0].Spec.Template.Spec
+		ServiceSpec := template.Spec.ServiceSpec
+
+		// set a label for our deployment
+		labels := map[string]string{
+			"app":        deploymentName,
+			"controller": req.Name,
+			"template":   templateName,
+		}
+
+		//service.Spec = ServiceSpec
+		// This code has error
+		// spec.clusterIP: Invalid value: "": field is immutable
+		if ServiceSpec.Ports != nil {
+			service.Spec.Ports = ServiceSpec.Ports
+		}
+
+		// set labels to spec.selector for our deployment
+		if service.Spec.Selector == nil {
+			service.Spec.Selector = labels
+		}
+
+		//if service.Spec.Type == nil {
+		//	service.Spec.Type = "ClusterIP"
+		//}
+		service.Spec.Type = "ClusterIP"
+
+		// set the owner so that garbage collection can kicks in
+		if err := ctrl.SetControllerReference(&userland, service, r.Scheme); err != nil {
+			log.Error(err, "unable to set ownerReference from Userland to Service")
+			return err
+		}
+
+		// end of ctrl.CreateOrUpdate
+		return nil
+
+	}); err != nil {
+		// error handling of ctrl.CreateOrUpdate
+		log.Error(err, "unable to ensure service is correct")
+		return ctrl.Result{}, err
+	}
+
 	// 4: Update userland Status
+	//TODO:
 
 	return ctrl.Result{}, nil
 }
 
-// cleanupOwnedResources will delete any existing Deployment resources
+// cleanupOwnedResources will delete any existing Deployment and Service resources
 func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr.Logger, userland *escv1alpha1.Userland) error {
 	log.Info("finding existing Deployments for userland resource")
 
 	// List all deployment resources owned by this Userland resource
 	var deployments appsv1.DeploymentList
-	if err := r.List(ctx, &deployments, client.InNamespace(userland.Namespace), client.MatchingFields(map[string]string{deploymentOwnerKey: userland.Name})); err != nil {
+	if err := r.List(ctx, &deployments, client.InNamespace(userland.Namespace), client.MatchingFields(map[string]string{resourceOwnerKey: userland.Name})); err != nil {
 		return err
 	}
 
@@ -170,19 +223,44 @@ func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr
 		r.Recorder.Eventf(userland, corev1.EventTypeNormal, "Deleted", "Deleted deployment %q", deployment.Name)
 	}
 
+	// Service
+	// List all Service resources owned by this Userland resource
+	var services corev1.ServiceList
+	if err := r.List(ctx, &services, client.InNamespace(userland.Namespace), client.MatchingFields(map[string]string{resourceOwnerKey: userland.Name})); err != nil {
+		return err
+	}
+
+	// Delete deployment if the deployment name doesn't match userland.spec.TemplateName
+	for _, service := range services.Items {
+		if service.Name == userland.Spec.TemplateName+"-"+userland.Name+"-"+"svc" {
+			// If this service's name matches the one on the Userland resource
+			// then do not delete it.
+			continue
+		}
+
+		// Delete old service object which doesn't match
+		if err := r.Delete(ctx, &service); err != nil {
+			log.Error(err, "failed to delete Service resource")
+			return err
+		}
+
+		log.Info("delete service resource: " + service.Name)
+		r.Recorder.Eventf(userland, corev1.EventTypeNormal, "Deleted", "Deleted service %q", service.Name)
+	}
+
 	return nil
 }
 
 var (
-	deploymentOwnerKey = ".metadata.controller"
-	apiGVStr           = escv1alpha1.GroupVersion.String()
+	resourceOwnerKey = ".metadata.controller"
+	apiGVStr         = escv1alpha1.GroupVersion.String()
 )
 
 // SetupWithManager setup with controller manager
 func (r *UserlandReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
-	// add deploymentOwnerKey index to deployment object which Userland resource owns
-	if err := mgr.GetFieldIndexer().IndexField(&appsv1.Deployment{}, deploymentOwnerKey, func(rawObj runtime.Object) []string {
+	// add resourceOwnerKey index to deployment object which Userland resource owns
+	if err := mgr.GetFieldIndexer().IndexField(&appsv1.Deployment{}, resourceOwnerKey, func(rawObj runtime.Object) []string {
 		// grab the deployment object, extract the owner...
 		deployment := rawObj.(*appsv1.Deployment)
 		owner := metav1.GetControllerOf(deployment)
@@ -200,9 +278,30 @@ func (r *UserlandReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// add resourceOwnerKey index to service object which Userland resource owns
+	if err := mgr.GetFieldIndexer().IndexField(&corev1.Service{}, resourceOwnerKey, func(rawObj runtime.Object) []string {
+		// grab the service object, extract the owner...
+		service := rawObj.(*corev1.Service)
+		owner := metav1.GetControllerOf(service)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a Userland...
+		if owner.APIVersion != apiGVStr || owner.Kind != "Userland" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	// define to watch targets...Userland resource and owned Deployment
 	return ctrl.NewControllerManagedBy(mgr).
+		For(&escv1alpha1.Template{}).
 		For(&escv1alpha1.Userland{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }
