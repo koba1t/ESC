@@ -44,6 +44,7 @@ type UserlandReconciler struct {
 // +kubebuilder:rbac:groups=esc.k06.in,resources=userlands/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=esc.k06.in,resources=templates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile loop for Userland resource
