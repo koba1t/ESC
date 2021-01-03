@@ -54,7 +54,7 @@ func main() {
 		o.Development = true
 	}))
 
-	var resyncPeriod = time.Second * 30
+	var resyncPeriod = time.Minute * 10
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		SyncPeriod:         &resyncPeriod,
@@ -68,14 +68,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.TemplateReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Template"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Template")
-		os.Exit(1)
-	}
+	// if err = (&controllers.TemplateReconciler{
+	// 	Client: mgr.GetClient(),
+	// 	Log:    ctrl.Log.WithName("controllers").WithName("Template"),
+	// 	Scheme: mgr.GetScheme(),
+	// }).SetupWithManager(mgr); err != nil {
+	// 	setupLog.Error(err, "unable to create controller", "controller", "Template")
+	// 	os.Exit(1)
+	// }
 	if err = (&controllers.UserlandReconciler{
 		Client:   mgr.GetClient(),
 		Log:      ctrl.Log.WithName("controllers").WithName("Userland"),
