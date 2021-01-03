@@ -1,0 +1,6 @@
+apiVersion: esc.k06.in/v1alpha2
+kind: Userland
+metadata:
+  name: koba1t
+spec:
+  templateName: vscode

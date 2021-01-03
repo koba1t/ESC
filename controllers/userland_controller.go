@@ -29,7 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	escv1alpha1 "github.com/koba1t/ESC/api/v1alpha1"
+	escv1alpha2 "github.com/koba1t/ESC/api/v1alpha2"
 )
 
 // UserlandReconciler reconciles a Userland object
@@ -45,6 +45,7 @@ type UserlandReconciler struct {
 // +kubebuilder:rbac:groups=esc.k06.in,resources=templates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile loop for Userland resource
@@ -53,7 +54,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("userland", req.NamespacedName)
 
 	// 1: Load the Userland resourcce by name
-	var userland escv1alpha1.Userland
+	var userland escv1alpha2.Userland
 	if err := r.Get(ctx, req.NamespacedName, &userland); err != nil {
 		log.Error(err, "unable to fetch Userland")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -71,7 +72,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// 3: Create or Update deployment object
 	templateName := userland.Spec.TemplateName
 	// Get Template resource from templateName
-	var template escv1alpha1.Template
+	var template escv1alpha2.Template
 	namespacedTemplateName := req.NamespacedName
 	namespacedTemplateName.Name = templateName
 	if err := r.Get(ctx, namespacedTemplateName, &template); err != nil {
@@ -198,7 +199,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 
 // cleanupOwnedResources will delete any existing Deployment and Service resources
-func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr.Logger, userland *escv1alpha1.Userland) error {
+func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr.Logger, userland *escv1alpha2.Userland) error {
 	log.Info("finding existing Deployments for userland resource")
 
 	// List all deployment resources owned by this Userland resource
@@ -255,7 +256,7 @@ func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr
 
 var (
 	resourceOwnerKey = ".metadata.controller"
-	apiGVStr         = escv1alpha1.GroupVersion.String()
+	apiGVStr         = escv1alpha2.GroupVersion.String()
 )
 
 // SetupWithManager setup with controller manager
@@ -301,8 +302,8 @@ func (r *UserlandReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// define to watch targets...Userland resource and owned Deployment
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&escv1alpha1.Template{}).
-		For(&escv1alpha1.Userland{}).
+		For(&escv1alpha2.Template{}).
+		For(&escv1alpha2.Userland{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Complete(r)

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	escv1alpha1 "github.com/koba1t/ESC/api/v1alpha1"
+	escv1alpha2 "github.com/koba1t/ESC/api/v1alpha2"
 	"github.com/koba1t/ESC/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -39,6 +40,7 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = escv1alpha1.AddToScheme(scheme)
+	_ = escv1alpha2.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
