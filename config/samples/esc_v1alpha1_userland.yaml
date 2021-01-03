@@ -1,7 +1,6 @@
 apiVersion: esc.k06.in/v1alpha1
 kind: Userland
 metadata:
-  name: userland-sample
+  name: koba1t
 spec:
-  # Add fields here
-  foo: bar
+  templateName: vscode
