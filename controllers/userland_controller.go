@@ -56,7 +56,12 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// 1: Load the Userland resourcce by name
 	var userland escv1alpha2.Userland
 	if err := r.Get(ctx, req.NamespacedName, &userland); err != nil {
-		log.Error(err, "unable to fetch Userland")
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch Userland")
+		} else {
+			// Object not found, return.  Created objects are automatically garbage collected.
+			log.Info("Userland object not found: " + req.NamespacedName.String())
+		}
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
