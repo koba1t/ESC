@@ -27,12 +27,17 @@ type UserlandSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// Name is the name of this resource. It used to naming owned resources.
+	// +optional
 	Name string `json:"Name,omitempty" protobuf:"bytes,1,opt,name=Name"`
 
+	// TemplateName is the name of a Template in the same namespace as the binding this resource.
 	TemplateName string `json:"templateName" protobuf:"bytes,2,opt,name=templateName"`
 
+	// Enabled to create pod from userland resource.
+	// Default true.
 	// +optional
-	//Enabled bool `json:"enabled,omitempty" optional:"true" protobuf:"varint,3,opt,name=enabled"`
+	Enabled bool `json:"enabled,omitempty" optional:"true" protobuf:"varint,3,opt,name=enabled"`
 }
 
 // UserlandStatus defines the observed state of Userland

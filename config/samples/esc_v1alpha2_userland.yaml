@@ -4,3 +4,4 @@ metadata:
   name: koba1t
 spec:
   templateName: vscode
+  #enabled: false    # Don't create pod from this resource.

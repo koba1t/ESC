@@ -148,8 +148,14 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Create or Update deployment object
 	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 
-		// set the replicas from 1
+		// set the replicas from 1 by default
 		replicas := int32(1)
+
+		// If Userland.Spec.Enabled was false, deployment has no pod.
+		if userland.Spec.Enabled == false {
+			replicas = int32(0)
+		}
+
 		deploy.Spec.Replicas = &replicas
 
 		//get template.Spec from template resource
