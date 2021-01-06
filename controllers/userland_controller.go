@@ -79,8 +79,48 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	// define deploymentName join to templateName and metadata.Name
+	// define deploymentName join to templateName and userland.Name
 	deploymentName := userland.Spec.TemplateName + "-" + userland.Name
+
+	// make map for volumeMounts using make deployment
+	volumeMounts := map[string]corev1.VolumeMount{}
+
+	for _, v := range template.Spec.VolumeSpecs {
+		volumeMounts[v.VolumeMount.ContainerName] = corev1.VolumeMount{
+			Name:      v.Name,
+			MountPath: v.VolumeMount.MountPath,
+		}
+
+		// define persistentVolumeClaim using deploymentName
+		persistentVolumeClaim := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      deploymentName + "-pvc-" + v.Name,
+				Namespace: req.Namespace,
+			},
+		}
+
+		if _, err := ctrl.CreateOrUpdate(ctx, r.Client, persistentVolumeClaim, func() error {
+
+			//get PersistentVolumeClaimSpec from template resource
+			if persistentVolumeClaim.Spec.VolumeName != "" {
+				v.PersistentVolumeClaimSpec.VolumeName = persistentVolumeClaim.Spec.VolumeName
+			}
+			persistentVolumeClaim.Spec = v.PersistentVolumeClaimSpec
+
+			// set the owner so that garbage collection can kicks in
+			if err := ctrl.SetControllerReference(&userland, persistentVolumeClaim, r.Scheme); err != nil {
+				log.Error(err, "unable to set ownerReference from Userland to PersistentVolumeClaim")
+				return err
+			}
+
+			return nil
+
+		}); err != nil {
+			// error handling of ctrl.CreateOrUpdate
+			log.Error(err, "unable to ensure persistentVolumeClaim is correct")
+			return ctrl.Result{}, err
+		}
+	}
 
 	// define deployment template using deploymentName
 	deploy := &appsv1.Deployment{
@@ -128,6 +168,34 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err := ctrl.SetControllerReference(&userland, deploy, r.Scheme); err != nil {
 			log.Error(err, "unable to set ownerReference from Userland to Deployment")
 			return err
+		}
+
+		// set volumeMounts from template.spec.volumes for our deployment
+		volumes := []corev1.Volume{}
+		for k, v := range deploy.Spec.Template.Spec.Containers {
+			if _, found := volumeMounts[v.Name]; found {
+				deploy.Spec.Template.Spec.Containers[k].VolumeMounts = append(deploy.Spec.Template.Spec.Containers[k].VolumeMounts, volumeMounts[v.Name])
+				// container := &deploy.Spec.Template.Spec.Containers[k]
+				// container.VolumeMounts[0] = corev1.VolumeMount{
+				// 	Name:      "nameddd",
+				// 	MountPath: "/usr/bin",
+				// }
+
+				//add volume data for deploy.Spec.Template.Spec.Volumes
+				vs := corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: deploymentName + "-pvc-" + volumeMounts[v.Name].Name,
+					},
+				}
+				volumes = append(volumes, corev1.Volume{
+					Name:         volumeMounts[v.Name].Name,
+					VolumeSource: vs,
+				})
+			}
+		}
+
+		if volumes != nil {
+			deploy.Spec.Template.Spec.Volumes = volumes
 		}
 
 		// end of ctrl.CreateOrUpdate
@@ -251,6 +319,31 @@ func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr
 		r.Recorder.Eventf(userland, corev1.EventTypeNormal, "Deleted", "Deleted service %q", service.Name)
 	}
 
+	// Service
+	// List all Service resources owned by this Userland resource
+	var persistentVolumeClaims corev1.PersistentVolumeClaimList
+	if err := r.List(ctx, &persistentVolumeClaims, client.InNamespace(userland.Namespace), client.MatchingFields(map[string]string{resourceOwnerKey: userland.Name})); err != nil {
+		return err
+	}
+
+	// // Delete deployment if the deployment name doesn't match userland.spec.TemplateName
+	// for _, persistentVolumeClaim := range persistentVolumeClaims.Items {
+	// 	if persistentVolumeClaim.Name == userland.Spec.TemplateName+"-"+userland.Name+"-"+"pvc" {
+	// 		// If this service's name matches the one on the Userland resource
+	// 		// then do not delete it.
+	// 		continue
+	// 	}
+
+	// 	// Delete old service object which doesn't match
+	// 	if err := r.Delete(ctx, &persistentVolumeClaim); err != nil {
+	// 		log.Error(err, "failed to delete persistentVolumeClaim resource")
+	// 		return err
+	// 	}
+
+	// 	log.Info("delete persistentVolumeClaim resource: " + persistentVolumeClaim.Name)
+	// 	r.Recorder.Eventf(userland, corev1.EventTypeNormal, "Deleted", "Deleted persistentVolumeClaim %q", persistentVolumeClaim.Name)
+	// }
+
 	return nil
 }
 
@@ -286,6 +379,25 @@ func (r *UserlandReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// grab the service object, extract the owner...
 		service := rawObj.(*corev1.Service)
 		owner := metav1.GetControllerOf(service)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a Userland...
+		if owner.APIVersion != apiGVStr || owner.Kind != "Userland" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
+	// add resourceOwnerKey index to persistentVolumeClaim object which Userland resource owns
+	if err := mgr.GetFieldIndexer().IndexField(&corev1.PersistentVolumeClaim{}, resourceOwnerKey, func(rawObj runtime.Object) []string {
+		// grab the service object, extract the owner...
+		persistentVolumeClaim := rawObj.(*corev1.PersistentVolumeClaim)
+		owner := metav1.GetControllerOf(persistentVolumeClaim)
 		if owner == nil {
 			return nil
 		}

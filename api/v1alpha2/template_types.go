@@ -33,7 +33,7 @@ type VolumeSpec struct {
 
 	VolumeMount VolumeMount `json:"volumeMount" protobuf:"bytes,2,opt,name=volumeMount"`
 
-	PVCSpec v1.PersistentVolumeClaimSpec `json:"pvcSpec" protobuf:"bytes,3,opt,name=pvcSpec"`
+	PersistentVolumeClaimSpec v1.PersistentVolumeClaimSpec `json:"pvcSpec" protobuf:"bytes,3,opt,name=pvcSpec"`
 }
 
 //VolumeMount defines the mount point for volume. (like v1.VolumeMount)
@@ -42,8 +42,6 @@ type VolumeMount struct {
 	ContainerName string `json:"containerName" protobuf:"bytes,1,opt,name=containerName"`
 
 	MountPath string `json:"mountPath" protobuf:"bytes,3,opt,name=mountPath"`
-
-	SubPath string `json:"subPath,omitempty" protobuf:"bytes,4,opt,name=subPath"`
 }
 
 // TemplateSpec defines the desired state of Template

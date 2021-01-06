@@ -6071,8 +6071,6 @@ spec:
                         type: string
                       mountPath:
                         type: string
-                      subPath:
-                        type: string
                     required:
                     - containerName
                     - mountPath
