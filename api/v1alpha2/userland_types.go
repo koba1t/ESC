@@ -30,6 +30,9 @@ type UserlandSpec struct {
 	Name string `json:"Name,omitempty" protobuf:"bytes,1,opt,name=Name"`
 
 	TemplateName string `json:"templateName" protobuf:"bytes,2,opt,name=templateName"`
+
+	// +optional
+	//Enabled bool `json:"enabled,omitempty" optional:"true" protobuf:"varint,3,opt,name=enabled"`
 }
 
 // UserlandStatus defines the observed state of Userland

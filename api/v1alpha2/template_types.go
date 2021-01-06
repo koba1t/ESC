@@ -31,17 +31,7 @@ type VolumeSpec struct {
 	//VolumeName is unified volume name.
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
-	VolumeMount VolumeMount `json:"volumeMount" protobuf:"bytes,2,opt,name=volumeMount"`
-
 	PersistentVolumeClaimSpec v1.PersistentVolumeClaimSpec `json:"pvcSpec" protobuf:"bytes,3,opt,name=pvcSpec"`
-}
-
-//VolumeMount defines the mount point for volume. (like v1.VolumeMount)
-type VolumeMount struct {
-	//ContainerName match VolumeSpec to container with name at template.spec.conatner.name field.
-	ContainerName string `json:"containerName" protobuf:"bytes,1,opt,name=containerName"`
-
-	MountPath string `json:"mountPath" protobuf:"bytes,3,opt,name=mountPath"`
 }
 
 // TemplateSpec defines the desired state of Template
@@ -51,8 +41,10 @@ type TemplateSpec struct {
 
 	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,1,opt,name=template"`
 
+	// +optional
 	ServiceSpec v1.ServiceSpec `json:"service,omitempty" protobuf:"bytes,2,opt,name=service"`
 
+	// +optional
 	VolumeSpecs []VolumeSpec `json:"volumes,omitempty" protobuf:"bytes,3,opt,name=volumes"`
 }
 

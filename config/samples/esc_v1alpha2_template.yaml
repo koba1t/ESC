@@ -9,6 +9,9 @@ spec:
       - image: codercom/code-server:3.8.0
         name: code-server
         args: ["--auth","none","project"]
+        volumeMounts:
+        - name: user-volume
+          mountPath: /home/coder/project
   service:
     ports:
     - name: 80-80
@@ -17,9 +20,6 @@ spec:
       targetPort: 8080
   volumes:
   - name: user-volume
-    volumeMount:
-      containerName: code-server
-      mountPath: /home/coder/project
     pvcSpec:
       accessModes:
         - ReadWriteOnce

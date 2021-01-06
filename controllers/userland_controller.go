@@ -87,19 +87,29 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// define deploymentName join to templateName and userland.Name
 	deploymentName := userland.Spec.TemplateName + "-" + userland.Name
 
-	// make map for volumeMounts using make deployment
-	volumeMounts := map[string]corev1.VolumeMount{}
+	// volume list of defined template resource
+	volumes := []corev1.Volume{}
 
 	for _, v := range template.Spec.VolumeSpecs {
-		volumeMounts[v.VolumeMount.ContainerName] = corev1.VolumeMount{
-			Name:      v.Name,
-			MountPath: v.VolumeMount.MountPath,
+
+		// pvc resource name
+		pvcName := deploymentName + "-pvc-" + v.Name
+
+		//add volume data for deploy.Spec.Template.Spec.Volumes
+		vs := corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: pvcName,
+			},
 		}
+		volumes = append(volumes, corev1.Volume{
+			Name:         v.Name,
+			VolumeSource: vs,
+		})
 
 		// define persistentVolumeClaim using deploymentName
 		persistentVolumeClaim := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      deploymentName + "-pvc-" + v.Name,
+				Name:      pvcName,
 				Namespace: req.Namespace,
 			},
 		}
@@ -175,32 +185,8 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return err
 		}
 
-		// set volumeMounts from template.spec.volumes for our deployment
-		volumes := []corev1.Volume{}
-		for k, v := range deploy.Spec.Template.Spec.Containers {
-			if _, found := volumeMounts[v.Name]; found {
-				deploy.Spec.Template.Spec.Containers[k].VolumeMounts = append(deploy.Spec.Template.Spec.Containers[k].VolumeMounts, volumeMounts[v.Name])
-				// container := &deploy.Spec.Template.Spec.Containers[k]
-				// container.VolumeMounts[0] = corev1.VolumeMount{
-				// 	Name:      "nameddd",
-				// 	MountPath: "/usr/bin",
-				// }
-
-				//add volume data for deploy.Spec.Template.Spec.Volumes
-				vs := corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: deploymentName + "-pvc-" + volumeMounts[v.Name].Name,
-					},
-				}
-				volumes = append(volumes, corev1.Volume{
-					Name:         volumeMounts[v.Name].Name,
-					VolumeSource: vs,
-				})
-			}
-		}
-
 		if volumes != nil {
-			deploy.Spec.Template.Spec.Volumes = volumes
+			deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, volumes...)
 		}
 
 		// end of ctrl.CreateOrUpdate
@@ -423,5 +409,6 @@ func (r *UserlandReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&escv1alpha2.Userland{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Complete(r)
 }

@@ -6061,24 +6061,9 @@ spec:
                           backing this claim.
                         type: string
                     type: object
-                  volumeMount:
-                    description: VolumeMount defines the mount point for volume. (like
-                      v1.VolumeMount)
-                    properties:
-                      containerName:
-                        description: ContainerName match VolumeSpec to container with
-                          name at template.spec.conatner.name field.
-                        type: string
-                      mountPath:
-                        type: string
-                    required:
-                    - containerName
-                    - mountPath
-                    type: object
                 required:
                 - name
                 - pvcSpec
-                - volumeMount
                 type: object
               type: array
           required:
