@@ -20,30 +20,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 //VolumeSpec defines the volume of TemplateSpec
 type VolumeSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	//VolumeName is unified volume name.
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 
+	//PersistentVolumeClaimSpec stores to spec of required PersistentVolumeClaim
 	PersistentVolumeClaimSpec v1.PersistentVolumeClaimSpec `json:"pvcSpec" protobuf:"bytes,3,opt,name=pvcSpec"`
 }
 
 // TemplateSpec defines the desired state of Template
 type TemplateSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
+	//Template stores to spec of required create containers.
 	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,1,opt,name=template"`
 
+	//ServiceSpec stores to spec for expose containers.
 	// +optional
 	ServiceSpec v1.ServiceSpec `json:"service,omitempty" protobuf:"bytes,2,opt,name=service"`
 
+	//VolumeSpecs defines volumes used to containers.
 	// +optional
 	VolumeSpecs []VolumeSpec `json:"volumes,omitempty" protobuf:"bytes,3,opt,name=volumes"`
 }
