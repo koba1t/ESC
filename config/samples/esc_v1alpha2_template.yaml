@@ -1,0 +1,29 @@
+apiVersion: esc.k06.in/v1alpha2
+kind: Template
+metadata:
+  name: vscode
+spec:
+  template:
+    spec:
+      containers:
+      - image: codercom/code-server:3.8.0
+        name: code-server
+        args: ["--auth","none","project"]
+        volumeMounts:
+        - name: user-volume
+          mountPath: /home/coder/project
+  service:
+    ports:
+    - name: 80-80
+      port: 80
+      protocol: TCP
+      targetPort: 8080
+  volumes:
+  - name: user-volume
+    pvcSpec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
+      storageClassName: longhorn

@@ -29,7 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	escv1alpha1 "github.com/koba1t/ESC/api/v1alpha1"
+	escv1alpha2 "github.com/koba1t/ESC/api/v1alpha2"
 )
 
 // UserlandReconciler reconciles a Userland object
@@ -45,6 +45,7 @@ type UserlandReconciler struct {
 // +kubebuilder:rbac:groups=esc.k06.in,resources=templates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;delete
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile loop for Userland resource
@@ -53,9 +54,14 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("userland", req.NamespacedName)
 
 	// 1: Load the Userland resourcce by name
-	var userland escv1alpha1.Userland
+	var userland escv1alpha2.Userland
 	if err := r.Get(ctx, req.NamespacedName, &userland); err != nil {
-		log.Error(err, "unable to fetch Userland")
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch Userland")
+		} else {
+			// Object not found, return.  Created objects are automatically garbage collected.
+			log.Info("Userland object not found: " + req.NamespacedName.String())
+		}
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
@@ -71,15 +77,65 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// 3: Create or Update deployment object
 	templateName := userland.Spec.TemplateName
 	// Get Template resource from templateName
-	var template escv1alpha1.Template
+	var template escv1alpha2.Template
 	namespacedTemplateName := req.NamespacedName
 	namespacedTemplateName.Name = templateName
 	if err := r.Get(ctx, namespacedTemplateName, &template); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// define deploymentName join to templateName and metadata.Name
+	// define deploymentName join to templateName and userland.Name
 	deploymentName := userland.Spec.TemplateName + "-" + userland.Name
+
+	// volume list of defined template resource
+	volumes := []corev1.Volume{}
+
+	for _, v := range template.Spec.VolumeSpecs {
+
+		// pvc resource name
+		pvcName := deploymentName + "-pvc-" + v.Name
+
+		//add volume data for deploy.Spec.Template.Spec.Volumes
+		vs := corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: pvcName,
+			},
+		}
+		volumes = append(volumes, corev1.Volume{
+			Name:         v.Name,
+			VolumeSource: vs,
+		})
+
+		// define persistentVolumeClaim using deploymentName
+		persistentVolumeClaim := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pvcName,
+				Namespace: req.Namespace,
+			},
+		}
+
+		if _, err := ctrl.CreateOrUpdate(ctx, r.Client, persistentVolumeClaim, func() error {
+
+			//get PersistentVolumeClaimSpec from template resource
+			if persistentVolumeClaim.Spec.VolumeName != "" {
+				v.PersistentVolumeClaimSpec.VolumeName = persistentVolumeClaim.Spec.VolumeName
+			}
+			persistentVolumeClaim.Spec = v.PersistentVolumeClaimSpec
+
+			// set the owner so that garbage collection can kicks in
+			if err := ctrl.SetControllerReference(&userland, persistentVolumeClaim, r.Scheme); err != nil {
+				log.Error(err, "unable to set ownerReference from Userland to PersistentVolumeClaim")
+				return err
+			}
+
+			return nil
+
+		}); err != nil {
+			// error handling of ctrl.CreateOrUpdate
+			log.Error(err, "unable to ensure persistentVolumeClaim is correct")
+			return ctrl.Result{}, err
+		}
+	}
 
 	// define deployment template using deploymentName
 	deploy := &appsv1.Deployment{
@@ -92,8 +148,14 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Create or Update deployment object
 	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 
-		// set the replicas from 1
+		// set the replicas from 1 by default
 		replicas := int32(1)
+
+		// If Userland.Spec.Enabled was false, deployment has no pod.
+		if userland.Spec.Enabled == false {
+			replicas = int32(0)
+		}
+
 		deploy.Spec.Replicas = &replicas
 
 		//get template.Spec from template resource
@@ -127,6 +189,10 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err := ctrl.SetControllerReference(&userland, deploy, r.Scheme); err != nil {
 			log.Error(err, "unable to set ownerReference from Userland to Deployment")
 			return err
+		}
+
+		if volumes != nil {
+			deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, volumes...)
 		}
 
 		// end of ctrl.CreateOrUpdate
@@ -198,7 +264,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 
 // cleanupOwnedResources will delete any existing Deployment and Service resources
-func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr.Logger, userland *escv1alpha1.Userland) error {
+func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr.Logger, userland *escv1alpha2.Userland) error {
 	log.Info("finding existing Deployments for userland resource")
 
 	// List all deployment resources owned by this Userland resource
@@ -250,12 +316,37 @@ func (r *UserlandReconciler) cleanupOwnedResources(ctx context.Context, log logr
 		r.Recorder.Eventf(userland, corev1.EventTypeNormal, "Deleted", "Deleted service %q", service.Name)
 	}
 
+	// Service
+	// List all Service resources owned by this Userland resource
+	var persistentVolumeClaims corev1.PersistentVolumeClaimList
+	if err := r.List(ctx, &persistentVolumeClaims, client.InNamespace(userland.Namespace), client.MatchingFields(map[string]string{resourceOwnerKey: userland.Name})); err != nil {
+		return err
+	}
+
+	// // Delete deployment if the deployment name doesn't match userland.spec.TemplateName
+	// for _, persistentVolumeClaim := range persistentVolumeClaims.Items {
+	// 	if persistentVolumeClaim.Name == userland.Spec.TemplateName+"-"+userland.Name+"-"+"pvc" {
+	// 		// If this service's name matches the one on the Userland resource
+	// 		// then do not delete it.
+	// 		continue
+	// 	}
+
+	// 	// Delete old service object which doesn't match
+	// 	if err := r.Delete(ctx, &persistentVolumeClaim); err != nil {
+	// 		log.Error(err, "failed to delete persistentVolumeClaim resource")
+	// 		return err
+	// 	}
+
+	// 	log.Info("delete persistentVolumeClaim resource: " + persistentVolumeClaim.Name)
+	// 	r.Recorder.Eventf(userland, corev1.EventTypeNormal, "Deleted", "Deleted persistentVolumeClaim %q", persistentVolumeClaim.Name)
+	// }
+
 	return nil
 }
 
 var (
 	resourceOwnerKey = ".metadata.controller"
-	apiGVStr         = escv1alpha1.GroupVersion.String()
+	apiGVStr         = escv1alpha2.GroupVersion.String()
 )
 
 // SetupWithManager setup with controller manager
@@ -299,11 +390,31 @@ func (r *UserlandReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// add resourceOwnerKey index to persistentVolumeClaim object which Userland resource owns
+	if err := mgr.GetFieldIndexer().IndexField(&corev1.PersistentVolumeClaim{}, resourceOwnerKey, func(rawObj runtime.Object) []string {
+		// grab the service object, extract the owner...
+		persistentVolumeClaim := rawObj.(*corev1.PersistentVolumeClaim)
+		owner := metav1.GetControllerOf(persistentVolumeClaim)
+		if owner == nil {
+			return nil
+		}
+		// ...make sure it's a Userland...
+		if owner.APIVersion != apiGVStr || owner.Kind != "Userland" {
+			return nil
+		}
+
+		// ...and if so, return it
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	// define to watch targets...Userland resource and owned Deployment
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&escv1alpha1.Template{}).
-		For(&escv1alpha1.Userland{}).
+		For(&escv1alpha2.Template{}).
+		For(&escv1alpha2.Userland{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Complete(r)
 }

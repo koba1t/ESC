@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	escv1alpha1 "github.com/koba1t/ESC/api/v1alpha1"
+	escv1alpha2 "github.com/koba1t/ESC/api/v1alpha2"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,6 +65,12 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = escv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = escv1alpha2.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = escv1alpha2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme

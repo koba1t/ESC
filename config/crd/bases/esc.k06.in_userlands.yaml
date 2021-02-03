@@ -34,8 +34,19 @@ spec:
         spec:
           description: UserlandSpec defines the desired state of Userland
           properties:
-            templateName:
+            Name:
+              description: Name is the name of this resource. It used to naming owned
+                resources.
               type: string
+            enabled:
+              description: Enabled to create pod from userland resource. Default true.
+              type: boolean
+            templateName:
+              description: TemplateName is the name of a Template in the same namespace
+                as the binding this resource.
+              type: string
+          required:
+          - templateName
           type: object
         status:
           description: UserlandStatus defines the observed state of Userland
@@ -44,6 +55,9 @@ spec:
   version: v1alpha1
   versions:
   - name: v1alpha1
+    served: true
+    storage: false
+  - name: v1alpha2
     served: true
     storage: true
 status:
