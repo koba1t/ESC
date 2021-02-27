@@ -32,7 +32,7 @@ type UserlandSpec struct {
 	// Enabled to create pod from userland resource.
 	// Default true.
 	// +optional
-	Enabled bool `json:"enabled,omitempty" optional:"true" protobuf:"varint,3,opt,name=enabled"`
+	Enabled *bool `json:"enabled,omitempty" protobuf:"varint,3,opt,name=enabled"`
 }
 
 // UserlandStatus defines the observed state of Userland

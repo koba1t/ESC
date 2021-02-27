@@ -152,7 +152,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		replicas := int32(1)
 
 		// If Userland.Spec.Enabled was false, deployment has no pod.
-		if userland.Spec.Enabled == false {
+		if !*userland.Spec.Enabled && userland.Spec.Enabled != nil {
 			replicas = int32(0)
 		}
 
