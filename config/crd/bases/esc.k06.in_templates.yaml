@@ -35,8 +35,7 @@ spec:
           description: TemplateSpec defines the desired state of Template
           properties:
             service:
-              description: ServiceSpec describes the attributes that a user creates
-                on a service.
+              description: ServiceSpec stores to spec for expose containers.
               properties:
                 clusterIP:
                   description: 'clusterIP is the IP address of the service and is
@@ -219,8 +218,7 @@ spec:
                   type: string
               type: object
             template:
-              description: PodTemplateSpec describes the data a pod should have when
-                created from a template
+              description: Template stores to spec of required create containers.
               properties:
                 metadata:
                   description: 'Standard object''s metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata'
@@ -5937,6 +5935,7 @@ spec:
                   type: object
               type: object
             volumes:
+              description: VolumeSpecs defines volumes used to containers.
               items:
                 description: VolumeSpec defines the volume of TemplateSpec
                 properties:
@@ -5944,9 +5943,8 @@ spec:
                     description: VolumeName is unified volume name.
                     type: string
                   pvcSpec:
-                    description: PersistentVolumeClaimSpec describes the common attributes
-                      of storage devices and allows a Source for provider-specific
-                      attributes
+                    description: PersistentVolumeClaimSpec stores to spec of required
+                      PersistentVolumeClaim
                     properties:
                       accessModes:
                         description: 'AccessModes contains the desired access modes

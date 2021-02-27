@@ -152,7 +152,7 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		replicas := int32(1)
 
 		// If Userland.Spec.Enabled was false, deployment has no pod.
-		if userland.Spec.Enabled == false {
+		if !*userland.Spec.Enabled && userland.Spec.Enabled != nil {
 			replicas = int32(0)
 		}
 
@@ -185,17 +185,17 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		//}
 		deploy.Spec.Template.Spec = templateSpec
 
+		// Append volumes created by this controller
+		if volumes != nil {
+			deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, volumes...)
+		}
+
 		// set the owner so that garbage collection can kicks in
 		if err := ctrl.SetControllerReference(&userland, deploy, r.Scheme); err != nil {
 			log.Error(err, "unable to set ownerReference from Userland to Deployment")
 			return err
 		}
 
-		if volumes != nil {
-			deploy.Spec.Template.Spec.Volumes = append(deploy.Spec.Template.Spec.Volumes, volumes...)
-		}
-
-		// end of ctrl.CreateOrUpdate
 		return nil
 
 	}); err != nil {
@@ -248,7 +248,6 @@ func (r *UserlandReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return err
 		}
 
-		// end of ctrl.CreateOrUpdate
 		return nil
 
 	}); err != nil {
